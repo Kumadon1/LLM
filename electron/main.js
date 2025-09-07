@@ -21,14 +21,16 @@ function startPythonBackend() {
     ? path.join(__dirname, '..', 'backend', 'app.py')
     : path.join(process.resourcesPath, 'backend', 'app.py');
 
+  // Use the SAME database as development - single source of truth!
+  const projectRoot = path.join(__dirname, '..');
   pythonProcess = spawn(pythonExecutable, [backendScript], {
     env: {
       ...process.env,
       PYTHONUNBUFFERED: '1',
       PORT: BACKEND_PORT,
-      DATABASE_PATH: path.join(app.getPath('userData'), 'james_llm.db'),
-      MODELS_PATH: path.join(app.getPath('userData'), 'models'),
-      CACHE_PATH: path.join(app.getPath('userData'), 'cache')
+      DATABASE_PATH: path.join(projectRoot, 'backend', 'james_llm.db'),
+      MODELS_PATH: path.join(projectRoot, 'backend', 'models'),
+      CACHE_PATH: path.join(projectRoot, 'backend', 'cache')
     }
   });
 
