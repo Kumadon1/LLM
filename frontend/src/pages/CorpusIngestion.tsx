@@ -15,6 +15,11 @@ import {
 
 const CorpusIngestion: React.FC = () => {
   const datasets = [
+    { name: 'Project Gutenberg', desc: 'Over 70,000 free eBooks - public domain literature and texts.' },
+    { name: 'WikiText-103', desc: 'Over 100 million tokens from verified Good and Featured articles on English Wikipedia.' },
+    { name: 'OpenWebText2', desc: 'WebText dataset created from Reddit outbound links with high karma scores.' },
+    { name: 'Oscar English slice', desc: 'Large-scale multilingual corpus extracted from Common Crawl - English subset.' },
+    { name: 'C4 (en)', desc: 'Colossal Clean Crawled Corpus - English dataset used to train T5 models.' },
     { name: 'The Pile', desc: '~825 GB from multiple sources. Extremely diverse content.' },
     { name: 'Wikipedia', desc: 'English Wikipedia dump.' },
     { name: 'Books3', desc: 'Large collection of books.' },
