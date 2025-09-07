@@ -70,7 +70,7 @@ async def get_texts(
             title=t["title"],
             content=t["content"],
             source=t["source"],
-            metadata=t["metadata"],
+            metadata=t.get("metadata") or t.get("meta_data"),
             created_at=datetime.fromisoformat(t["created_at"]) if isinstance(t["created_at"], str) else t["created_at"]
         )
         for t in texts

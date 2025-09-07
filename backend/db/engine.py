@@ -10,7 +10,7 @@ from sqlalchemy.orm import sessionmaker, Session, scoped_session
 from sqlalchemy.pool import QueuePool, NullPool
 import logging
 
-from backend.db.models import Base
+from db.models import Base
 
 logger = logging.getLogger(__name__)
 

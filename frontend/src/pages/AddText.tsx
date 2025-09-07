@@ -15,6 +15,11 @@ import {
   FormControl,
   Chip,
   Snackbar,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
 } from '@mui/material';
 import {
   CloudUpload as CloudUploadIcon,
@@ -70,6 +75,8 @@ const AddText: React.FC = () => {
   const [corpusStats, setCorpusStats] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [stopPolling, setStopPolling] = useState<(() => void) | null>(null);
+  const [firstConfirmOpen, setFirstConfirmOpen] = useState(false);
+  const [secondConfirmOpen, setSecondConfirmOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Sample text for demonstration
@@ -178,6 +185,36 @@ const AddText: React.FC = () => {
     updateProcessingStats(sampleText);
   };
 
+  const loadCorpusStats = async () => {
+    try {
+      const stats = await TrainingService.getDataStats();
+      setCorpusStats(stats);
+    } catch (err) {
+      console.error('Failed to load corpus stats:', err);
+    }
+  };
+
+  const handleClearAllData = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/api/training/clear-all', {
+        method: 'DELETE',
+      });
+      const result = await response.json();
+      if (result.status === 'success') {
+        setError(null);
+        alert('All training data has been cleared successfully.');
+        // Reload corpus stats
+        loadCorpusStats();
+      } else {
+        setError(`Failed to clear data: ${result.message}`);
+      }
+    } catch (err) {
+      setError(`Error clearing data: ${err}`);
+    }
+    setSecondConfirmOpen(false);
+    setFirstConfirmOpen(false);
+  };
+
   useEffect(() => {
     if (trainingText) {
       updateProcessingStats(trainingText);
@@ -186,14 +223,6 @@ const AddText: React.FC = () => {
 
   // Load corpus stats on mount
   useEffect(() => {
-    const loadCorpusStats = async () => {
-      try {
-        const stats = await TrainingService.getDataStats();
-        setCorpusStats(stats);
-      } catch (err) {
-        console.error('Failed to load corpus stats:', err);
-      }
-    };
     loadCorpusStats();
   }, []);
 
@@ -208,9 +237,28 @@ const AddText: React.FC = () => {
 
   return (
     <Box>
-      <Typography variant="h5" sx={{ mb: 1 }}>
-        Add Text
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+        <Typography variant="h5">
+          Add Text
+        </Typography>
+        <Button
+          variant="contained"
+          size="small"
+          onClick={() => setFirstConfirmOpen(true)}
+          sx={{
+            backgroundColor: '#d32f2f',
+            color: 'white',
+            minWidth: '40px',
+            height: '30px',
+            fontSize: '14px',
+            '&:hover': {
+              backgroundColor: '#b71c1c',
+            },
+          }}
+        >
+          42
+        </Button>
+      </Box>
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
@@ -486,6 +534,70 @@ const AddText: React.FC = () => {
           </Box>
         </CardContent>
       </StatusCard>
+
+      {/* First Confirmation Dialog */}
+      <Dialog
+        open={firstConfirmOpen}
+        onClose={() => setFirstConfirmOpen(false)}
+      >
+        <DialogTitle>⚠️ Clear All Training Data?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            This will permanently delete ALL training data including:
+            <br />• All text corpus entries
+            <br />• All neural network checkpoints
+            <br />• All Markov n-grams
+            <br />• All accuracy records
+            <br /><br />
+            This action cannot be undone. Are you sure?
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setFirstConfirmOpen(false)} color="primary">
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              setFirstConfirmOpen(false);
+              setSecondConfirmOpen(true);
+            }}
+            color="error"
+            variant="contained"
+          >
+            Yes, Continue
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Second Confirmation Dialog */}
+      <Dialog
+        open={secondConfirmOpen}
+        onClose={() => setSecondConfirmOpen(false)}
+      >
+        <DialogTitle sx={{ color: 'error.main' }}>🚨 FINAL WARNING</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            You are about to DELETE ALL TRAINING DATA.
+            <br /><br />
+            <strong>This is your last chance to cancel.</strong>
+            <br /><br />
+            Type "DELETE" to confirm:
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSecondConfirmOpen(false)} color="primary">
+            Cancel
+          </Button>
+          <Button
+            onClick={handleClearAllData}
+            color="error"
+            variant="contained"
+            sx={{ backgroundColor: '#d32f2f' }}
+          >
+            DELETE EVERYTHING
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

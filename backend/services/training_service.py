@@ -10,9 +10,9 @@ import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 
-from backend.db.repository_orm import get_repository
-from backend.services.markov_service import process_text_block
-from backend.services.evaluation_service import run_monte_carlo_evaluation
+from db.repository_orm import get_repository
+from services.markov_service import process_text_block
+from services.evaluation_service import run_monte_carlo_evaluation
 
 logger = logging.getLogger(__name__)
 
@@ -24,48 +24,31 @@ VOCAB_SIZE = len(VOCAB)
 SEQ_LEN = 11  # context window
 
 
-class PersistentTextDataset(Dataset):
-    """Dataset that loads and accumulates text from the database"""
+class BlockTextDataset(Dataset):
+    """Dataset for training on a single text block"""
     
-    def __init__(self, max_chars: int = 1_000_000):
+    def __init__(self, text_block: str):
         """
-        Initialize dataset from persistent text corpus
+        Initialize dataset from a single text block
         
         Args:
-            max_chars: Maximum characters to load (to manage memory)
+            text_block: The text block to train on
         """
         self.data = []
-        self.repo = get_repository()
         
-        logger.info("Loading text corpus from database...")
+        # Clean and convert text to indices
+        cleaned_text = self._clean_text(text_block)
+        for char in cleaned_text:
+            if char in CHAR2IDX:
+                self.data.append(CHAR2IDX[char])
         
-        # Load all text from corpus, accumulating across sessions
-        corpus_texts = self.repo.list_corpus_texts(limit=1000)  # Get more texts
+        logger.info(f"Created dataset with {len(self.data)} characters")
         
-        total_chars = 0
-        for corpus in corpus_texts:
-            if total_chars >= max_chars:
-                break
-                
-            # Clean and convert text to indices
-            cleaned_text = self._clean_text(corpus.content)
-            for char in cleaned_text:
-                if char in CHAR2IDX:
-                    self.data.append(CHAR2IDX[char])
-                    total_chars += 1
-                    
-                    if total_chars >= max_chars:
-                        break
-        
-        logger.info(f"Loaded {total_chars} characters from {len(corpus_texts)} corpus entries")
-        
-        # If we don't have enough data, add some default text
+        # If we don't have enough data for even one sample, pad with spaces
         if len(self.data) < SEQ_LEN + 1:
-            logger.warning("Insufficient training data, adding default text")
-            default_text = "THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG " * 100
-            for char in self._clean_text(default_text):
-                if char in CHAR2IDX:
-                    self.data.append(CHAR2IDX[char])
+            logger.warning(f"Block too small ({len(self.data)} chars), padding with spaces")
+            while len(self.data) < SEQ_LEN + 1:
+                self.data.append(CHAR2IDX[' '])
     
     def _clean_text(self, text: str) -> str:
         """Clean text to only include vocabulary characters"""
@@ -147,35 +130,7 @@ class ImprovedCharModel(nn.Module):
         return logits
 
 
-def persist_training_text(text: str, title: Optional[str] = None, 
-                         source: Optional[str] = None) -> int:
-    """
-    Persist training text to database
-    
-    Args:
-        text: The raw text to persist
-        title: Optional title for the text
-        source: Optional source identifier
-    
-    Returns:
-        The ID of the persisted corpus entry
-    """
-    repo = get_repository()
-    
-    # Add text to corpus
-    corpus = repo.add_corpus_text(
-        content=text,
-        title=title or f"Training text {datetime.now().isoformat()}",
-        source=source or "training_api",
-        metadata={  # This will be mapped to meta_data in the repository
-            "training_timestamp": datetime.now().isoformat(),
-            "original_length": len(text)
-        }
-    )
-    
-    logger.info(f"Persisted training text: {corpus.id} ({len(text)} chars)")
-    
-    return corpus.id
+# Removed persist_training_text - we don't want to accumulate text in database
 
 
 def train_with_persistence(
@@ -187,12 +142,12 @@ def train_with_persistence(
     progress_callback: Optional[Callable[[int, str], None]] = None
 ) -> Tuple[str, dict]:
     """
-    Train the neural model with persistent data accumulation
+    Train the neural model block by block
     
     Args:
-        text: New text to add to training corpus
-        block_size: Size of training blocks
-        epochs: Number of training epochs
+        text: Text to train on (will be processed in blocks)
+        block_size: Size of each training block in characters
+        epochs: Number of training epochs PER BLOCK
         batch_size: Batch size for training
         learning_rate: Learning rate for optimizer
         progress_callback: Optional callback for progress updates
@@ -200,61 +155,22 @@ def train_with_persistence(
     Returns:
         Tuple of (checkpoint_path, training_stats)
     """
-    logger.info("Starting training with persistence")
+    logger.info(f"Starting block-by-block training: {len(text)} chars, block_size={block_size}, epochs={epochs}")
     
-    # Step 1: Persist the new training text
-    if progress_callback:
-        progress_callback(5, "Persisting training data...")
-    
-    corpus_id = persist_training_text(text)
-    
-    # Step 2: Process text for Markov model (in blocks)
-    if progress_callback:
-        progress_callback(10, "Processing Markov n-grams...")
-    
-    text_len = len(text)
-    processed = 0
-    block_num = 0
-    
-    while processed < text_len:
-        end = min(processed + block_size, text_len)
-        block = text[processed:end]
-        
-        # Process this block for Markov model
-        process_text_block(block)
-        
-        processed = end
-        block_num += 1
-        
-        if progress_callback:
-            progress = 10 + int(20 * processed / text_len)
-            progress_callback(progress, f"Processing block {block_num}...")
-    
-    # Step 3: Load accumulated dataset from all sessions
-    if progress_callback:
-        progress_callback(35, "Loading accumulated training data...")
-    
+    # Initialize device
     device = torch.device("cuda" if torch.cuda.is_available() else 
                          "mps" if torch.backends.mps.is_available() else "cpu")
+    logger.info(f"Using device: {device}")
     
-    dataset = PersistentTextDataset(max_chars=2_000_000)  # Load up to 2M chars
-    
-    if len(dataset) == 0:
-        logger.error("No valid training data available")
-        raise ValueError("Insufficient training data")
-    
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-    
-    # Step 4: Initialize or load model
+    # Initialize or load model
     if progress_callback:
-        progress_callback(40, "Initializing neural model...")
+        progress_callback(5, "Initializing neural model...")
     
     model = ImprovedCharModel().to(device)
+    repo = get_repository()
     
     # Try to load existing checkpoint to continue training
-    repo = get_repository()
     best_checkpoint = repo.get_best_checkpoint()
-    
     if best_checkpoint and Path(best_checkpoint.path).exists():
         try:
             logger.info(f"Loading existing checkpoint: {best_checkpoint.path}")
@@ -263,64 +179,105 @@ def train_with_persistence(
         except Exception as e:
             logger.warning(f"Could not load checkpoint: {e}")
     
-    # Step 5: Train the model
+    # Initialize optimizer and criterion
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
     criterion = nn.CrossEntropyLoss()
     
-    model.train()
+    # Calculate number of blocks
+    text_len = len(text)
+    num_blocks = (text_len + block_size - 1) // block_size  # Ceiling division
+    
+    logger.info(f"Processing {num_blocks} blocks of up to {block_size} characters each")
+    
+    # Training statistics
     training_stats = {
-        "epochs": epochs,
+        "epochs_per_block": epochs,
+        "total_blocks": num_blocks,
         "total_steps": 0,
+        "block_losses": [],
         "final_loss": 0,
-        "corpus_id": corpus_id,
-        "dataset_size": len(dataset),
-        "device": str(device)
+        "device": str(device),
+        "text_length": text_len
     }
     
-    total_steps = min(len(dataloader) * epochs, block_size // batch_size)
-    current_step = 0
+    # Process each block sequentially
+    processed = 0
+    for block_idx in range(num_blocks):
+        # Extract current block
+        block_start = block_idx * block_size
+        block_end = min(block_start + block_size, text_len)
+        text_block = text[block_start:block_end]
+        
+        logger.info(f"\nProcessing Block {block_idx + 1}/{num_blocks}: {len(text_block)} characters")
+        
+        if progress_callback:
+            base_progress = int(90 * block_idx / num_blocks)
+            progress_callback(base_progress, f"Processing block {block_idx + 1}/{num_blocks}...")
+        
+        # Step 1: Extract Markov chains from this block
+        logger.info(f"Extracting Markov chains from block {block_idx + 1}")
+        process_text_block(text_block)
+        
+        # Step 2: Create dataset for this block
+        block_dataset = BlockTextDataset(text_block)
+        
+        if len(block_dataset) == 0:
+            logger.warning(f"Block {block_idx + 1} has no valid training samples, skipping")
+            continue
+        
+        block_dataloader = DataLoader(block_dataset, batch_size=batch_size, shuffle=True)
+        
+        # Step 3: Train neural network on this block for specified epochs
+        model.train()
+        block_total_loss = 0
+        block_step_count = 0
+        
+        for epoch in range(epochs):
+            epoch_loss = 0
+            batch_count = 0
+            
+            for batch_idx, (x, y) in enumerate(block_dataloader):
+                x, y = x.to(device), y.to(device)
+                
+                optimizer.zero_grad()
+                logits = model(x)
+                loss = criterion(logits, y)
+                loss.backward()
+                
+                # Gradient clipping
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                
+                optimizer.step()
+                
+                epoch_loss += loss.item()
+                batch_count += 1
+                block_step_count += 1
+                training_stats["total_steps"] += 1
+                
+                # Progress update
+                if progress_callback and batch_count % 10 == 0:
+                    block_progress = base_progress + int(90 * (block_idx + (epoch + 1) / epochs) / num_blocks)
+                    progress_callback(
+                        min(block_progress, 90),
+                        f"Block {block_idx+1}/{num_blocks}, Epoch {epoch+1}/{epochs}, Batch {batch_idx+1}/{len(block_dataloader)}, Loss: {loss.item():.4f}"
+                    )
+            
+            if batch_count > 0:
+                avg_epoch_loss = epoch_loss / batch_count
+                block_total_loss += avg_epoch_loss
+                logger.info(f"Block {block_idx+1}, Epoch {epoch+1}/{epochs} - Avg Loss: {avg_epoch_loss:.4f}")
+        
+        # Record block statistics
+        if block_step_count > 0:
+            avg_block_loss = block_total_loss / epochs
+            training_stats["block_losses"].append(avg_block_loss)
+            logger.info(f"Block {block_idx+1} complete - Avg Loss across epochs: {avg_block_loss:.4f}")
+        
+        processed = block_end
     
-    for epoch in range(epochs):
-        epoch_loss = 0
-        batch_count = 0
-        
-        for batch_idx, (x, y) in enumerate(dataloader):
-            x, y = x.to(device), y.to(device)
-            
-            optimizer.zero_grad()
-            logits = model(x)
-            loss = criterion(logits, y)
-            loss.backward()
-            
-            # Gradient clipping
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-            
-            optimizer.step()
-            
-            epoch_loss += loss.item()
-            batch_count += 1
-            current_step += 1
-            training_stats["total_steps"] += 1
-            
-            # Progress update
-            if progress_callback:
-                progress = 40 + int(50 * current_step / total_steps)
-                progress_callback(
-                    min(progress, 90),
-                    f"Epoch {epoch+1}/{epochs}, Batch {batch_idx+1}/{len(dataloader)}, Loss: {loss.item():.4f}"
-                )
-            
-            # Stop if we've processed enough steps
-            if current_step >= total_steps:
-                break
-        
-        avg_loss = epoch_loss / max(1, batch_count)
-        training_stats["final_loss"] = avg_loss
-        
-        logger.info(f"Epoch {epoch+1}/{epochs} - Avg Loss: {avg_loss:.4f}")
-        
-        if current_step >= total_steps:
-            break
+    # Calculate final statistics
+    if training_stats["block_losses"]:
+        training_stats["final_loss"] = sum(training_stats["block_losses"]) / len(training_stats["block_losses"])
     
     # Step 6: Save checkpoint
     if progress_callback:
@@ -336,12 +293,12 @@ def train_with_persistence(
     
     # Save checkpoint record to database
     checkpoint = repo.create_checkpoint(
-        epochs=epochs,
+        epochs=epochs * num_blocks,  # Total epochs across all blocks
         block_size=block_size,
         path=str(checkpoint_path),
         loss=training_stats["final_loss"],
         accuracy=None,  # Calculate if needed
-        notes=f"Trained on corpus {corpus_id}, {training_stats['total_steps']} steps",
+        notes=f"Trained on {num_blocks} blocks, {training_stats['total_steps']} steps, {epochs} epochs per block",
         is_best=True  # Mark as best for now
     )
     

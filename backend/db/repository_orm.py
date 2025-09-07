@@ -154,7 +154,7 @@ class DatabaseRepository:
                 content=content,
                 title=title,
                 source=source,
-                meta_data=metadata,  # Use meta_data instead of metadata
+                meta_data=metadata,
                 word_count=len(content.split()),
                 char_count=len(content)
             )
@@ -361,7 +361,7 @@ class DatabaseRepository:
             metric = AccuracyMetric(
                 metric_type=metric_type,
                 value=value,
-                meta_data=metadata,  # Use meta_data instead of metadata
+                meta_data=metadata,
                 model_checkpoint_id=checkpoint_id
             )
             session.add(metric)

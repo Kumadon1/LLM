@@ -45,7 +45,7 @@ class TextCorpus(Base):
     title = Column(String(255), nullable=True)
     content = Column(Text, nullable=False)
     source = Column(String(255), nullable=True)
-    meta_data = Column(JSON, nullable=True)  # Renamed from metadata to avoid SQLAlchemy reserved word
+    meta_data = Column('metadata', JSON, nullable=True)  # Map to 'metadata' column in DB
     word_count = Column(Integer, nullable=True)
     char_count = Column(Integer, nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
@@ -93,7 +93,7 @@ class AccuracyMetric(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     metric_type = Column(String(100), nullable=False)
     value = Column(Float, nullable=False)
-    meta_data = Column(JSON, nullable=True)  # Renamed from metadata to avoid SQLAlchemy reserved word
+    meta_data = Column('metadata', JSON, nullable=True)  # Map to 'metadata' column in DB
     model_checkpoint_id = Column(Integer, ForeignKey('neural_checkpoints.id'), nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     

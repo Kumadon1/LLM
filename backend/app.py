@@ -684,5 +684,29 @@ async def download_model(model_name: str, model_url: str):
         "status": "started"
     }
 
+@app.delete("/api/training/clear-all")
+def clear_all_training_data():
+    """Clear all training data from database - DANGEROUS"""
+    try:
+        from backend.db.repository_orm import get_repository
+        from sqlalchemy import text
+        repo = get_repository()
+        
+        # Clear all training-related tables
+        with repo.session_factory() as session:
+            # Delete all corpus texts
+            session.execute(text("DELETE FROM text_corpus"))
+            # Delete all checkpoints  
+            session.execute(text("DELETE FROM neural_checkpoints"))
+            # Delete all markov ngrams
+            session.execute(text("DELETE FROM markov_ngrams"))
+            # Delete all accuracy records
+            session.execute(text("DELETE FROM accuracy_records"))
+            session.commit()
+            
+        return {"status": "success", "message": "All training data cleared"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=PORT, log_level="info")
