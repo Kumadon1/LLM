@@ -1,0 +1,25 @@
+# Core Framework
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+pydantic==2.9.2
+python-multipart==0.0.6
+
+# Database
+sqlalchemy==2.0.23
+
+# ML/AI Libraries
+numpy==1.26.4
+pandas==2.2.3
+scikit-learn==1.5.2
+torch>=2.0.0
+
+# Text processing
+pyenchant>=3.2.2
+wordfreq>=3.0.0
+
+# For building standalone executable
+pyinstaller==6.11.0
+
+# Utils
+python-dotenv==1.0.1
+aiofiles==23.2.1

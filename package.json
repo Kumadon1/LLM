@@ -1,0 +1,76 @@
+{
+  "name": "james-llm-1",
+  "version": "1.0.0",
+  "description": "Advanced LLM Desktop Application",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\" \"npm run dev:electron\"",
+    "dev:backend": "cd backend && source .venv/bin/activate && python main.py",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:electron": "wait-on http://localhost:5173 http://localhost:8000/health && electron .",
+    "build": "npm run build:frontend && npm run build:backend && npm run build:electron",
+    "build:frontend": "cd frontend && npm run build",
+    "build:backend": "cd backend && pyinstaller --onefile --name backend main.py",
+    "build:electron": "electron-builder",
+    "dist": "npm run build && electron-builder --publish=never",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/james/james-llm-1"
+  },
+  "author": "James",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "electron": "^33.0.2",
+    "electron-builder": "^25.1.7",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.james.llm1",
+    "productName": "James LLM 1",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "frontend/dist/**/*",
+      "backend/dist/**/*",
+      "!backend/.venv",
+      "!backend/__pycache__",
+      "!frontend/node_modules",
+      "!frontend/src"
+    ],
+    "extraResources": [
+      {
+        "from": "backend/dist/backend",
+        "to": "backend/backend"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "electron/assets/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "electron/entitlements.mac.plist",
+      "entitlementsInherit": "electron/entitlements.mac.plist"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "electron/assets/icon.ico"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "electron/assets/icon.png",
+      "category": "Development"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  }
+}

@@ -1,0 +1,2 @@
+Placeholder for icon files.
+Add your icon.png, icon.icns (macOS), icon.ico (Windows), and tray-icon.png files here.

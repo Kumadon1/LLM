@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>James LLM 1 - Desktop App</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .header {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .tabs {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 10px;
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+        }
+        .tab {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            white-space: nowrap;
+        }
+        .tab:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        .tab.active {
+            background: #0068c9;
+        }
+        .content {
+            flex: 1;
+            padding: 30px;
+            overflow-y: auto;
+        }
+        .status-bar {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+        }
+        .demo-content {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+        h1 { font-size: 2.5em; }
+        h2 { margin: 20px 0 10px; }
+        button {
+            background: #0068c9;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #0056a3;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🤖 James LLM 1</h1>
+        <span style="opacity: 0.7">v1.0.0 Advanced Desktop</span>
+    </div>
+    
+    <div class="tabs">
+        <div class="tab active" onclick="selectTab(this, 'neural')">Neural Config</div>
+        <div class="tab" onclick="selectTab(this, 'text')">Add Text</div>
+        <div class="tab" onclick="selectTab(this, 'generate')">Generate</div>
+        <div class="tab" onclick="selectTab(this, 'data')">Data Viewer</div>
+        <div class="tab" onclick="selectTab(this, 'monte')">Monte Carlo</div>
+        <div class="tab" onclick="selectTab(this, 'accuracy')">Accuracy</div>
+        <div class="tab" onclick="selectTab(this, 'corpus')">Corpus Ingestion</div>
+    </div>
+    
+    <div class="content">
+        <div id="tab-content">
+            <h2>Neural Configuration</h2>
+            <div class="demo-content">
+                <p>Configure your neural network parameters here.</p>
+                <br>
+                <button onclick="testBackend()">Test Backend Connection</button>
+                <button onclick="checkHealth()">Check System Health</button>
+                <br><br>
+                <div id="backend-status"></div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="status-bar">
+        <span id="status">Ready • Backend: <span id="backend-state">Checking...</span></span>
+        <span>Platform: <span id="platform"></span> • Electron: <span id="electron-version"></span></span>
+    </div>
+
+    <script>
+        // Tab switching
+        function selectTab(element, tabName) {
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            element.classList.add('active');
+            
+            const content = {
+                neural: '<h2>Neural Configuration</h2><div class="demo-content"><p>Configure your neural network parameters here.</p><br><button onclick="testBackend()">Test Backend Connection</button><button onclick="checkHealth()">Check System Health</button><br><br><div id="backend-status"></div></div>',
+                text: '<h2>Add Text</h2><div class="demo-content"><p>Input and manage text data for processing.</p></div>',
+                generate: '<h2>Generate</h2><div class="demo-content"><p>Generate text using your configured model.</p></div>',
+                data: '<h2>Data Viewer</h2><div class="demo-content"><p>View and analyze your data.</p></div>',
+                monte: '<h2>Monte Carlo</h2><div class="demo-content"><p>Run Monte Carlo simulations.</p></div>',
+                accuracy: '<h2>Accuracy</h2><div class="demo-content"><p>Track and evaluate model accuracy.</p></div>',
+                corpus: '<h2>Corpus Ingestion</h2><div class="demo-content"><p>Import and process text corpora.</p></div>'
+            };
+            document.getElementById('tab-content').innerHTML = content[tabName];
+        }
+        
+        // Test backend connection
+        async function testBackend() {
+            try {
+                const backendUrl = window.electronAPI ? await window.electronAPI.getBackendUrl() : 'http://localhost:8000';
+                const response = await fetch(backendUrl + '/');
+                const data = await response.json();
+                document.getElementById('backend-status').innerHTML = 
+                    `<strong>✅ Backend Connected!</strong><br>
+                     Name: ${data.name}<br>
+                     Status: ${data.status}<br>
+                     Version: ${data.version}`;
+            } catch (error) {
+                document.getElementById('backend-status').innerHTML = 
+                    `<strong>❌ Backend Connection Failed</strong><br>${error.message}`;
+            }
+        }
+        
+        // Check system health
+        async function checkHealth() {
+            try {
+                const backendUrl = window.electronAPI ? await window.electronAPI.getBackendUrl() : 'http://localhost:8000';
+                const response = await fetch(backendUrl + '/health');
+                const data = await response.json();
+                document.getElementById('backend-status').innerHTML = 
+                    `<strong>✅ System Health Check</strong><br>
+                     Status: ${data.status}<br>
+                     Database: ${data.database}<br>
+                     Models Path: ${data.models_path}<br>
+                     Cache Path: ${data.cache_path}`;
+                document.getElementById('backend-state').textContent = 'Connected';
+                document.getElementById('backend-state').style.color = '#4ade80';
+            } catch (error) {
+                document.getElementById('backend-state').textContent = 'Disconnected';
+                document.getElementById('backend-state').style.color = '#f87171';
+            }
+        }
+        
+        // Display platform info
+        if (window.electronAPI) {
+            document.getElementById('platform').textContent = window.electronAPI.platform;
+            document.getElementById('electron-version').textContent = window.electronAPI.versions.electron;
+        } else {
+            document.getElementById('platform').textContent = 'Web';
+            document.getElementById('electron-version').textContent = 'N/A';
+        }
+        
+        // Check backend on load
+        setTimeout(checkHealth, 1000);
+        
+        // Periodic health check
+        setInterval(checkHealth, 10000);
+    </script>
+</body>
+</html>

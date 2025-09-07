@@ -1,0 +1,75 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+ENV/
+env/
+*.egg
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+package-lock.json
+
+# Build outputs
+frontend/dist/
+electron/dist/
+*.log
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Cache and temporary files
+cache/
+*.cache
+.cache/
+tmp/
+temp/
+
+# Model files
+*.pt
+*.pth
+*.pkl
+*.h5
+*.ckpt
+checkpoints/
+models/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment variables
+.env
+.env.local
+.env.development
+.env.production
+
+# Logs
+logs/
+*.log
+nohup.out
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Electron
+electron-builder.yml
+out/

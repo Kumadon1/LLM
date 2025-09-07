@@ -1,0 +1,33 @@
+[theme]
+# Primary accent color for interactive elements
+primaryColor = "#0068c9"
+
+# Background color for the main content area
+backgroundColor = "#ffffff"
+
+# Background color for sidebar
+secondaryBackgroundColor = "#f0f2f6"
+
+# Color used for text
+textColor = "#262730"
+
+# Font family for all text
+font = "sans serif"
+
+[server]
+# Port to run the app on
+port = 8501
+
+# Automatically open browser when app starts
+headless = false
+
+# Run in development mode
+runOnSave = true
+
+[browser]
+# Tab title (shown in browser tab)
+gatherUsageStats = false
+
+# Hide the Streamlit menu in production
+[ui]
+hideTopBar = false

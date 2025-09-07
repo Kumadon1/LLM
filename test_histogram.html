@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Histogram Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        .histogram {
+            display: flex;
+            align-items: flex-end;
+            height: 300px;
+            gap: 2px;
+            background: #f0f0f0;
+            padding: 10px;
+            margin: 20px 0;
+        }
+        .bar-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end;
+            height: 100%;
+        }
+        .bar {
+            width: 100%;
+            background: #1976d2;
+            transition: all 0.3s;
+            min-height: 2px;
+        }
+        .bar:hover {
+            background: #1565c0;
+        }
+        .bar.empty {
+            background: #ccc;
+            min-height: 1px;
+        }
+        .count {
+            font-size: 11px;
+            margin-bottom: 2px;
+        }
+        .labels {
+            display: flex;
+            justify-content: space-between;
+        }
+        .label {
+            flex: 1;
+            text-align: center;
+            font-size: 10px;
+        }
+        #results {
+            background: #f9f9f9;
+            padding: 10px;
+            margin-top: 20px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Monte Carlo Histogram Test</h1>
+    
+    <button onclick="runSimulation()">Run Test Simulation</button>
+    <button onclick="clearResults()">Clear</button>
+    
+    <div class="histogram" id="histogram">
+        <div style="text-align: center; width: 100%; color: #666;">
+            Click "Run Test Simulation" to generate data
+        </div>
+    </div>
+    
+    <div class="labels" id="labels" style="display: none;">
+        <div class="label">0%</div>
+        <div class="label">10%</div>
+        <div class="label">20%</div>
+        <div class="label">30%</div>
+        <div class="label">40%</div>
+        <div class="label">50%</div>
+        <div class="label">60%</div>
+        <div class="label">70%</div>
+        <div class="label">80%</div>
+        <div class="label">90%</div>
+    </div>
+    
+    <div id="results"></div>
+    
+    <script>
+        function generateMockData(numRuns) {
+            // Generate realistic data for a poorly trained model
+            // Most results should be 0-30% valid words
+            const results = [];
+            for (let i = 0; i < numRuns; i++) {
+                // Bias towards low percentages
+                let validPercentage;
+                const rand = Math.random();
+                if (rand < 0.6) {
+                    // 60% chance of 0-20% valid
+                    validPercentage = Math.random() * 20;
+                } else if (rand < 0.85) {
+                    // 25% chance of 20-40% valid
+                    validPercentage = 20 + Math.random() * 20;
+                } else if (rand < 0.95) {
+                    // 10% chance of 40-60% valid
+                    validPercentage = 40 + Math.random() * 20;
+                } else {
+                    // 5% chance of 60-80% valid
+                    validPercentage = 60 + Math.random() * 20;
+                }
+                results.push({
+                    validPercentage,
+                    totalWords: Math.floor(10 + Math.random() * 20),
+                    validWords: Math.floor(validPercentage / 100 * (10 + Math.random() * 20))
+                });
+            }
+            return results;
+        }
+        
+        function createHistogram(data) {
+            // Create bins
+            const bins = {};
+            for (let i = 0; i < 100; i += 10) {
+                bins[`${i}-${i + 10}`] = 0;
+            }
+            
+            // Count data in bins
+            data.forEach(result => {
+                const binIndex = Math.floor(result.validPercentage / 10) * 10;
+                const binKey = `${binIndex}-${binIndex + 10}`;
+                if (bins[binKey] !== undefined) {
+                    bins[binKey]++;
+                }
+            });
+            
+            return Object.entries(bins).map(([bin, count]) => ({
+                bin,
+                count,
+                percentage: (count / data.length) * 100
+            }));
+        }
+        
+        function renderHistogram(histogramData, results) {
+            const container = document.getElementById('histogram');
+            const labels = document.getElementById('labels');
+            
+            if (results.length === 0) {
+                container.innerHTML = '<div style="text-align: center; width: 100%; color: #666;">No data</div>';
+                labels.style.display = 'none';
+                return;
+            }
+            
+            container.innerHTML = '';
+            labels.style.display = 'flex';
+            
+            const maxCount = Math.max(...histogramData.map(d => d.count), 1);
+            
+            [0, 10, 20, 30, 40, 50, 60, 70, 80, 90].forEach(binStart => {
+                const binData = histogramData.find(d => d.bin === `${binStart}-${binStart + 10}`);
+                const count = binData?.count || 0;
+                const heightPercent = count > 0 ? (count / maxCount) * 100 : 0;
+                
+                const barContainer = document.createElement('div');
+                barContainer.className = 'bar-container';
+                
+                if (count > 0) {
+                    const countLabel = document.createElement('div');
+                    countLabel.className = 'count';
+                    countLabel.textContent = count;
+                    barContainer.appendChild(countLabel);
+                }
+                
+                const bar = document.createElement('div');
+                bar.className = count > 0 ? 'bar' : 'bar empty';
+                bar.style.height = `${heightPercent}%`;
+                bar.title = `${binStart}-${binStart+10}%: ${count} runs`;
+                barContainer.appendChild(bar);
+                
+                container.appendChild(barContainer);
+            });
+            
+            // Update results summary
+            const validPercentages = results.map(r => r.validPercentage);
+            const mean = validPercentages.reduce((a, b) => a + b, 0) / validPercentages.length;
+            const sorted = [...validPercentages].sort((a, b) => a - b);
+            const median = sorted[Math.floor(sorted.length / 2)];
+            const min = Math.min(...validPercentages);
+            const max = Math.max(...validPercentages);
+            
+            document.getElementById('results').innerHTML = `
+                <h3>Results Summary (${results.length} runs)</h3>
+                <p><strong>Mean:</strong> ${mean.toFixed(1)}% valid words</p>
+                <p><strong>Median:</strong> ${median.toFixed(1)}% valid words</p>
+                <p><strong>Range:</strong> ${min.toFixed(1)}% - ${max.toFixed(1)}%</p>
+                <p><strong>Non-empty bins:</strong> ${histogramData.filter(d => d.count > 0).length}/10</p>
+            `;
+        }
+        
+        function runSimulation() {
+            const numRuns = 100;
+            const results = generateMockData(numRuns);
+            const histogramData = createHistogram(results);
+            
+            console.log('Results:', results);
+            console.log('Histogram data:', histogramData);
+            
+            renderHistogram(histogramData, results);
+        }
+        
+        function clearResults() {
+            document.getElementById('histogram').innerHTML = '<div style="text-align: center; width: 100%; color: #666;">Click "Run Test Simulation" to generate data</div>';
+            document.getElementById('labels').style.display = 'none';
+            document.getElementById('results').innerHTML = '';
+        }
+    </script>
+</body>
+</html>
