@@ -83,77 +83,29 @@ app.add_middleware(
 
 # Database initialization
 def init_database():
-    conn = sqlite3.connect(DATABASE_PATH)
-    cursor = conn.cursor()
-    
-    # Neural configurations table
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS neural_configs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            config JSON NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    
-    # Text corpus table
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS text_corpus (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT,
-            content TEXT NOT NULL,
-            source TEXT,
-            metadata JSON,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    
-    # Generation history table
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS generation_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            prompt TEXT NOT NULL,
-            response TEXT NOT NULL,
-            model TEXT,
-            parameters JSON,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    
-    # Accuracy metrics table
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS accuracy_metrics (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            metric_type TEXT NOT NULL,
-            value REAL NOT NULL,
-            metadata JSON,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    
-    conn.commit()
-    conn.close()
+    """Legacy database initialization - tables now created by SQLAlchemy models"""
+    # This function is kept for backward compatibility but tables are now
+    # created by SQLAlchemy models in db/models.py to ensure proper schema
+    pass
 
 # Initialize database on startup
-init_database()
-
-# Initialize SQLAlchemy tables for Markov/Neural as well
 try:
-    from backend.core.database import init_db as init_sa
-    init_sa()
-except Exception as _e:
-    print("Warning: Core SQLAlchemy init failed:", _e)
-
-# Initialize all model tables from db/models.py
-try:
-    from backend.db.models import Base as ModelsBase
-    from backend.db.engine import get_db_engine
-    engine = get_db_engine()
-    ModelsBase.metadata.create_all(bind=engine.engine)
-    print("Database tables initialized successfully")
+    from backend.db.init import ensure_database_initialized
+    if ensure_database_initialized():
+        print("Database initialized successfully")
+    else:
+        print("Warning: Database initialization incomplete")
 except Exception as e:
-    print(f"Warning: Could not initialize model tables: {e}")
+    print(f"Error initializing database: {e}")
+    # Try fallback initialization
+    try:
+        from backend.db.models import Base as ModelsBase
+        from backend.db.engine import get_db_engine
+        engine = get_db_engine()
+        ModelsBase.metadata.create_all(bind=engine.engine)
+        print("Database tables created via fallback method")
+    except Exception as fallback_error:
+        print(f"Fallback initialization also failed: {fallback_error}")
 
 # Pydantic models
 class NeuralConfig(BaseModel):
