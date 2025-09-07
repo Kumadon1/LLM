@@ -27,10 +27,12 @@ import {
   Save as SaveIcon,
   PlayArrow as PlayArrowIcon,
   AutoFixHigh as AutoFixHighIcon,
+  Pause as PauseIcon,
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 import { TrainingService } from '../services';
 import type { TrainingProgress, TrainingStats } from '../services';
+import { useTrainingStore } from '../store/trainingStore';
 
 const StyledPaper = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(3),
@@ -57,15 +59,24 @@ const StatusCard = styled(Card)(({ theme }) => ({
 }));
 
 const AddText: React.FC = () => {
+  // Global training store
+  const {
+    jobId,
+    progress,
+    message: progressMsg,
+    status: trainingStatus,
+    error: trainingError,
+    start: startTraining,
+    stop: stopTraining,
+    clear: clearTraining,
+  } = useTrainingStore();
+  
+  // Local state for UI
   const [trainingText, setTrainingText] = useState('');
   const [blockSize, setBlockSize] = useState(100000);
   const [saveAfterBlocks, setSaveAfterBlocks] = useState(1);
   const [neuralEpochs, setNeuralEpochs] = useState(5);
   const [enableBlockProcessing, setEnableBlockProcessing] = useState(true);
-  const [isTraining, setIsTraining] = useState(false);
-  const [jobId, setJobId] = useState<string | null>(null);
-  const [progress, setProgress] = useState<number>(0);
-  const [progressMsg, setProgressMsg] = useState<string>('');
   const [modelAccuracy, setModelAccuracy] = useState<string>('No data yet');
   const [processingStats, setProcessingStats] = useState<TrainingStats>({
     total_patterns: 0,
@@ -74,10 +85,12 @@ const AddText: React.FC = () => {
   });
   const [corpusStats, setCorpusStats] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
-  const [stopPolling, setStopPolling] = useState<(() => void) | null>(null);
   const [firstConfirmOpen, setFirstConfirmOpen] = useState(false);
   const [secondConfirmOpen, setSecondConfirmOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Derive training state from global store
+  const isTraining = trainingStatus === 'running' || trainingStatus === 'queued';
 
   // Sample text for demonstration
   const sampleText = `Mahananda has met with world leaders from the Emperor of Japan to the President of the United States, four-star generals, the leaders of many spiritual traditions, billionaires, movie producers, distinguished professors, athletes and coaches, actors and actresses, authors, and philanthropists, and has personally taught and mentored countless individuals to regain their physical health, fix their businesses, and let go of outdated paradigms that were holding them back. His presence and loving voice have been the source of countless transformations and remain a beacon of hope for many.`;
@@ -114,10 +127,9 @@ const AddText: React.FC = () => {
     setModelAccuracy('No data yet');
     setError(null);
     
-    // Stop any ongoing polling
-    if (stopPolling) {
-      stopPolling();
-      setStopPolling(null);
+    // Clear any ongoing training in global store
+    if (isTraining) {
+      stopTraining();
     }
   };
 
@@ -136,47 +148,20 @@ const AddText: React.FC = () => {
       return;
     }
     
-    setIsTraining(true);
-    setProgress(0);
-    setProgressMsg('Submitting job...');
     setError(null);
 
     try {
-      const jobId = await TrainingService.startTraining({
+      // Use global store to start training
+      await startTraining({
         text: trainingText,
         block_size: blockSize,
         epochs: neuralEpochs,
       });
       
-      setJobId(jobId);
-      setProgressMsg('Job queued');
-      
-      // Start polling for progress
-      const stop = await TrainingService.pollProgress(
-        jobId,
-        (progress: TrainingProgress) => {
-          setProgress(progress.progress);
-          setProgressMsg(progress.message);
-          
-          if (progress.status === 'success') {
-            setIsTraining(false);
-            setModelAccuracy('Model updated successfully');
-            setJobId(null);
-          } else if (progress.status === 'error') {
-            setIsTraining(false);
-            setError(progress.error || 'Training failed');
-            setJobId(null);
-          }
-        },
-        2000
-      );
-      
-      setStopPolling(() => stop);
+      setModelAccuracy('Training started - check progress above');
     } catch (err) {
       console.error(err);
-      setIsTraining(false);
       setError(err instanceof Error ? err.message : 'Failed to start training');
-      setProgressMsg('');
     }
   };
 
@@ -225,15 +210,20 @@ const AddText: React.FC = () => {
   useEffect(() => {
     loadCorpusStats();
   }, []);
-
-  // Cleanup polling on unmount
+  
+  // Display training error from global store
   useEffect(() => {
-    return () => {
-      if (stopPolling) {
-        stopPolling();
-      }
-    };
-  }, [stopPolling]);
+    if (trainingError) {
+      setError(trainingError);
+    }
+  }, [trainingError]);
+  
+  // Update model accuracy when training completes
+  useEffect(() => {
+    if (trainingStatus === 'success') {
+      setModelAccuracy('Model updated successfully');
+    }
+  }, [trainingStatus]);
 
   return (
     <Box>
@@ -266,10 +256,23 @@ const AddText: React.FC = () => {
         </Alert>
       )}
 
-      {isTraining && (
+      {(isTraining || trainingStatus === 'paused') && (
         <Box sx={{ mb: 2 }}>
           <LinearProgress variant="determinate" value={progress} />
-          <Typography variant="caption">{progressMsg} ({progress}%)</Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1 }}>
+            <Typography variant="caption">{progressMsg} ({progress}%)</Typography>
+            <Button
+              size="small"
+              onClick={() => isTraining ? stopTraining() : startTraining({ 
+                text: trainingText, 
+                block_size: blockSize, 
+                epochs: neuralEpochs 
+              })}
+              startIcon={isTraining ? <PauseIcon /> : <PlayArrowIcon />}
+            >
+              {isTraining ? 'Pause' : 'Resume'}
+            </Button>
+          </Box>
         </Box>
       )}
 

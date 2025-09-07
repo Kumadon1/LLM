@@ -25,6 +25,7 @@ import DataViewer from './pages/DataViewer';
 import MonteCarlo from './pages/MonteCarlo';
 import Accuracy from './pages/Accuracy';
 import CorpusIngestion from './pages/CorpusIngestion';
+import GlobalStatusBar from './components/GlobalStatusBar';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -142,6 +143,9 @@ const AppFixed: React.FC = () => {
           </Typography>
         </Paper>
       </Box>
+      
+      {/* Global Status Bar for running operations */}
+      <GlobalStatusBar />
     </ThemeProvider>
   );
 };
