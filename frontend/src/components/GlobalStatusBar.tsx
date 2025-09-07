@@ -19,6 +19,7 @@ import {
 } from '@mui/icons-material';
 import { useTrainingStore } from '../store/trainingStore';
 import { useMonteCarloStore } from '../store/monteCarloStore';
+import { useGenerationStore } from '../store/generationStore';
 import { useNavigate } from 'react-router-dom';
 
 interface JobIndicatorProps {
@@ -166,9 +167,16 @@ export const GlobalStatusBar: React.FC = () => {
     stop: stopMC,
   } = useMonteCarloStore();
   
+  // Generation store
+  const {
+    status: genStatus,
+    error: genError,
+  } = useGenerationStore();
+  
   const hasActiveJobs = 
     (trainingStatus !== 'idle' && trainingStatus !== 'success') ||
-    (mcStatus !== 'idle' && mcStatus !== 'completed');
+    (mcStatus !== 'idle' && mcStatus !== 'completed') ||
+    genStatus === 'generating';
   
   if (!hasActiveJobs) return null;
   
@@ -215,6 +223,19 @@ export const GlobalStatusBar: React.FC = () => {
           onStop={stopMC}
           onNavigate={() => navigate('/monte-carlo')}
           color="secondary"
+        />
+      )}
+      
+      {/* Text Generation */}
+      {genStatus === 'generating' && (
+        <JobIndicator
+          icon={<GenerateIcon color="info" />}
+          title="Generating Text"
+          progress={50}
+          status={genStatus}
+          message="Generating text..."
+          onNavigate={() => navigate('/generate')}
+          color="info"
         />
       )}
     </Box>

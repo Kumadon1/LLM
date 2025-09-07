@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -21,16 +21,13 @@ import {
   PlayArrow as PlayArrowIcon,
   Stop as StopIcon,
   Download as DownloadIcon,
+  Pause as PauseIcon,
+  RestartAlt as RestartIcon,
 } from '@mui/icons-material';
 import { GenerationService } from '../services';
+import { useMonteCarloStore } from '../store/monteCarloStore';
+import type { SimulationResult } from '../store/monteCarloStore';
 import axios from 'axios';
-
-interface SimulationResult {
-  validPercentage: number;
-  totalWords: number;
-  validWords: number;
-  text: string;
-}
 
 interface HistogramData {
   bin: string;
@@ -39,6 +36,26 @@ interface HistogramData {
 }
 
 const MonteCarlo: React.FC = () => {
+  // Global Monte Carlo store
+  const {
+    status: mcStatus,
+    progress: mcProgress,
+    message: mcMessage,
+    currentSimulation,
+    totalSimulations,
+    results,
+    stats,
+    params,
+    error: mcError,
+    start: startSimulation,
+    pause: pauseSimulation,
+    resume: resumeSimulation,
+    stop: stopSimulation,
+    clear: clearSimulation,
+    appendResults,
+  } = useMonteCarloStore();
+  
+  // Local state for UI parameters
   const [charsPerGen, setCharsPerGen] = useState<number>(250);
   const [numSims, setNumSims] = useState<number>(100);
   const [temperature, setTemperature] = useState<number>(1.0);
@@ -47,11 +64,12 @@ const MonteCarlo: React.FC = () => {
   const [trigram, setTrigram] = useState<number>(30);
   const [tetragram, setTetragram] = useState<number>(50);
   const [prompt, setPrompt] = useState<string>('');
+  const [error, setError] = useState<string | null>(null);
   
-  const [running, setRunning] = useState<boolean>(false);
-  const [progress, setProgress] = useState<number>(0);
-  const [status, setStatus] = useState<string>('');
-  const [results, setResults] = useState<SimulationResult[]>([]);
+  // Derive running state from global store
+  const running = mcStatus === 'running';
+  const paused = mcStatus === 'paused';
+  
   // Initialize with empty bins to show structure (4% intervals for detail)
   const initializeEmptyHistogram = () => {
     const bins: HistogramData[] = [];
@@ -67,16 +85,6 @@ const MonteCarlo: React.FC = () => {
   };
   
   const [histogramData, setHistogramData] = useState<HistogramData[]>(initializeEmptyHistogram());
-  const [stats, setStats] = useState<{
-    mean: number;
-    median: number;
-    stdDev: number;
-    min: number;
-    max: number;
-  } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  
-  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Load evaluation history on component mount
   useEffect(() => {
@@ -118,28 +126,12 @@ const MonteCarlo: React.FC = () => {
     loadEvaluationHistory();
   }, []);
 
-  const calculateStats = (data: SimulationResult[]) => {
-    if (data.length === 0) return null;
-    
-    const values = data.map(r => r.validPercentage);
-    values.sort((a, b) => a - b);
-    
-    const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
-    const median = values.length % 2 === 0
-      ? (values[values.length / 2 - 1] + values[values.length / 2]) / 2
-      : values[Math.floor(values.length / 2)];
-    
-    const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
-    const stdDev = Math.sqrt(variance);
-    
-    return {
-      mean: Math.round(mean * 10) / 10,
-      median: Math.round(median * 10) / 10,
-      stdDev: Math.round(stdDev * 10) / 10,
-      min: Math.round(Math.min(...values) * 10) / 10,
-      max: Math.round(Math.max(...values) * 10) / 10,
-    };
-  };
+  // Display error from global store
+  useEffect(() => {
+    if (mcError) {
+      setError(mcError);
+    }
+  }, [mcError]);
 
   const createHistogram = (data: SimulationResult[]) => {
     if (data.length === 0) {
@@ -181,95 +173,36 @@ const MonteCarlo: React.FC = () => {
   };
 
   const handleRun = async () => {
-    setRunning(true);
-    setProgress(0);
-    setStatus(`Starting simulation of ${numSims} runs...`);
     setError(null);
-    // Don't clear existing results - append to them
-    const existingResults = [...results];
     
-    abortControllerRef.current = new AbortController();
-    const simulationResults: SimulationResult[] = [];
-    
-    try {
-      for (let i = 0; i < numSims; i++) {
-        if (abortControllerRef.current?.signal.aborted) {
-          break;
-        }
-        
-        setStatus(`Running simulation ${i + 1} of ${numSims}...`);
-        setProgress(((i + 1) / numSims) * 100);
-        
-        try {
-          // Normalize Markov weights to sum to 1.0
-          const markovTotal = bigram + trigram + tetragram;
-          const normalizedBigram = markovTotal > 0 ? bigram / markovTotal : 0.33;
-          const normalizedTrigram = markovTotal > 0 ? trigram / markovTotal : 0.33;
-          const normalizedTetragram = markovTotal > 0 ? tetragram / markovTotal : 0.34;
-          
-          const response = await GenerationService.generateText({
-            prompt: prompt || undefined,
-            temperature,
-            max_tokens: charsPerGen,
-            // Pass the actual user-selected weights
-            neural_weight: neuralWeight / 100,  // Convert from percentage
-            bigram_weight: normalizedBigram,
-            trigram_weight: normalizedTrigram,
-            tetragram_weight: normalizedTetragram,
-          });
-          
-          // Filter out empty strings from word split
-          const words = response.generated_text.trim().split(/\s+/).filter(w => w.length > 0);
-          const validMask = response.valid_mask || [];
-          const validCount = validMask.filter(v => v === true).length;
-          
-          // Log for debugging
-          console.log(`Sim ${i + 1}: Generated ${words.length} words, valid_mask length: ${validMask.length}, valid count: ${validCount}`);
-          
-          // Calculate percentage - ensure we use the mask length if available
-          const totalForCalculation = validMask.length > 0 ? validMask.length : words.length;
-          const validPercentage = totalForCalculation > 0 
-            ? (validCount / totalForCalculation) * 100 
-            : 0;
-          
-          simulationResults.push({
-            validPercentage,
-            totalWords: totalForCalculation,
-            validWords: validCount,
-            text: response.generated_text,
-          });
-          
-          // Update results periodically for live histogram (including existing results)
-          if (i % 10 === 0 || i === numSims - 1) {
-            setResults([...existingResults, ...simulationResults]);
-          }
-        } catch (err) {
-          console.error(`Simulation ${i + 1} failed:`, err);
-          // Continue with other simulations
-        }
-        
-        // Small delay to prevent overwhelming the backend
-        await new Promise(resolve => setTimeout(resolve, 50));
-      }
-      
-      // Update final results to include both existing and new
-      setResults([...existingResults, ...simulationResults]);
-      setStatus(`Simulation complete: ${simulationResults.length} new runs added (${existingResults.length + simulationResults.length} total)`);
-    } catch (err) {
-      console.error('Simulation error:', err);
-      setError(err instanceof Error ? err.message : 'Simulation failed');
-    } finally {
-      setRunning(false);
-      abortControllerRef.current = null;
-    }
+    // Use global store to start simulation
+    await startSimulation({
+      numSims,
+      charsPerGen,
+      temperature,
+      prompt,
+      neuralWeight,
+      bigram,
+      trigram,
+      tetragram,
+    });
   };
 
   const handleStop = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      setStatus('Simulation stopped by user');
-      setRunning(false);
-    }
+    stopSimulation();
+  };
+  
+  const handlePause = () => {
+    pauseSimulation();
+  };
+  
+  const handleResume = () => {
+    resumeSimulation();
+  };
+  
+  const handleClear = () => {
+    clearSimulation();
+    setHistogramData(initializeEmptyHistogram());
   };
 
   const handleExport = () => {
@@ -291,18 +224,16 @@ const MonteCarlo: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  // Update histogram and stats when results change
+  // Update histogram when results change
   useEffect(() => {
     const newHistogramData = createHistogram(results);
-    const newStats = calculateStats(results);
     console.log('Updating Monte Carlo display:', {
       resultsCount: results.length,
       histogramData: newHistogramData,
-      stats: newStats
+      stats: stats
     });
     setHistogramData(newHistogramData);
-    setStats(newStats);
-  }, [results]);
+  }, [results, stats]);
 
   const sliderLabel = (v: number) => `${v}%`;
 
@@ -462,22 +393,45 @@ const MonteCarlo: React.FC = () => {
       {/* Run buttons */}
       <Box sx={{ mb: 3 }}>
         <Stack direction="row" spacing={2}>
-          <Button 
-            variant="contained" 
-            disabled={running} 
-            onClick={handleRun}
-            startIcon={<PlayArrowIcon />}
-          >
-            Run Simulation
-          </Button>
-          <Button 
-            variant="outlined" 
-            disabled={!running}
-            onClick={handleStop}
-            startIcon={<StopIcon />}
-          >
-            Stop
-          </Button>
+          {!running && !paused && (
+            <Button 
+              variant="contained" 
+              onClick={handleRun}
+              startIcon={<PlayArrowIcon />}
+            >
+              Run Simulation
+            </Button>
+          )}
+          {running && (
+            <Button 
+              variant="contained" 
+              onClick={handlePause}
+              startIcon={<PauseIcon />}
+              color="warning"
+            >
+              Pause
+            </Button>
+          )}
+          {paused && (
+            <Button 
+              variant="contained" 
+              onClick={handleResume}
+              startIcon={<PlayArrowIcon />}
+              color="success"
+            >
+              Resume
+            </Button>
+          )}
+          {(running || paused) && (
+            <Button 
+              variant="outlined" 
+              onClick={handleStop}
+              startIcon={<StopIcon />}
+              color="error"
+            >
+              Stop
+            </Button>
+          )}
           <Button
             variant="outlined"
             disabled={results.length === 0}
@@ -486,14 +440,35 @@ const MonteCarlo: React.FC = () => {
           >
             Export Results
           </Button>
+          {results.length > 0 && !running && !paused && (
+            <Button
+              variant="outlined"
+              onClick={handleClear}
+              startIcon={<RestartIcon />}
+              color="warning"
+            >
+              Clear Results
+            </Button>
+          )}
         </Stack>
       </Box>
 
       {/* Progress */}
-      {running && (
+      {(running || paused) && (
         <Box sx={{ mb: 2 }}>
-          <LinearProgress variant="determinate" value={progress} />
-          <Typography variant="caption">{status}</Typography>
+          <LinearProgress 
+            variant="determinate" 
+            value={mcProgress} 
+            color={paused ? "warning" : "primary"}
+          />
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
+            <Typography variant="caption">
+              {mcMessage} ({currentSimulation}/{totalSimulations})
+            </Typography>
+            <Typography variant="caption">
+              {Math.round(mcProgress)}%
+            </Typography>
+          </Box>
         </Box>
       )}
 
