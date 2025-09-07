@@ -30,7 +30,7 @@ export default defineConfig({
     // Increase chunk size warning limit
     chunkSizeWarningLimit: 800,
     // Generate source maps for debugging (set to false for production)
-    sourcemap: false,
+    sourcemap: true,
     // Clean output directory before build
     emptyOutDir: true,
     // Output directory

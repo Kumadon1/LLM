@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Accuracy API</title>
+</head>
+<body>
+    <h1>Testing Accuracy API</h1>
+    <button onclick="fetchData()">Fetch Evaluations</button>
+    <pre id="output"></pre>
+    
+    <script>
+        async function fetchData() {
+            try {
+                const response = await fetch('http://localhost:5001/api/evaluation/evaluations?limit=100');
+                const data = await response.json();
+                document.getElementById('output').textContent = JSON.stringify(data, null, 2);
+                console.log('API Response:', data);
+                
+                if (data.success && data.evaluations) {
+                    console.log('Number of evaluations:', data.evaluations.length);
+                    data.evaluations.forEach((eval, index) => {
+                        console.log(`Evaluation ${index + 1}:`, {
+                            id: eval.id,
+                            training_job_id: eval.training_job_id,
+                            mean_validity: eval.mean_validity,
+                            created_at: eval.created_at
+                        });
+                    });
+                }
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                document.getElementById('output').textContent = 'Error: ' + error.message;
+            }
+        }
+        
+        // Auto-fetch on load
+        fetchData();
+    </script>
+</body>
+</html>

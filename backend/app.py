@@ -14,16 +14,50 @@ if str(PROJECT_ROOT) not in sys.path:
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Set
 import sqlite3
 import json
 import uvicorn
 from datetime import datetime
 import asyncio
 import logging
+import time
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+# Simple event notification system for desktop app
+class EventNotifier:
+    def __init__(self):
+        self.monte_carlo_completions: List[Dict[str, Any]] = []
+        self.last_update_time = 0
+    
+    def notify_monte_carlo_complete(self, evaluation_id: int, stats: Dict[str, Any]):
+        """Notify that a Monte Carlo evaluation has completed"""
+        self.monte_carlo_completions.append({
+            'evaluation_id': evaluation_id,
+            'stats': stats,
+            'timestamp': time.time()
+        })
+        self.last_update_time = time.time()
+        # Keep only last 10 notifications
+        if len(self.monte_carlo_completions) > 10:
+            self.monte_carlo_completions.pop(0)
+    
+    def get_last_update_time(self):
+        """Get the timestamp of the last update"""
+        return self.last_update_time
+    
+    def clear_old_notifications(self):
+        """Clear notifications older than 5 minutes"""
+        current_time = time.time()
+        self.monte_carlo_completions = [
+            n for n in self.monte_carlo_completions 
+            if current_time - n['timestamp'] < 300
+        ]
+
+# Global event notifier instance
+event_notifier = EventNotifier()
 
 # Configuration from environment
 PORT = int(os.getenv('PORT', 5001))  # Changed default to 5001
@@ -109,7 +143,17 @@ try:
     from backend.core.database import init_db as init_sa
     init_sa()
 except Exception as _e:
-    print("Warning: SQLAlchemy init failed:", _e)
+    print("Warning: Core SQLAlchemy init failed:", _e)
+
+# Initialize all model tables from db/models.py
+try:
+    from backend.db.models import Base as ModelsBase
+    from backend.db.engine import get_db_engine
+    engine = get_db_engine()
+    ModelsBase.metadata.create_all(bind=engine.engine)
+    print("Database tables initialized successfully")
+except Exception as e:
+    print(f"Warning: Could not initialize model tables: {e}")
 
 # Pydantic models
 class NeuralConfig(BaseModel):
@@ -405,11 +449,20 @@ async def get_evaluation_history(
         return {
             "success": True,
             "evaluations": evaluations,
-            "count": len(evaluations)
+            "count": len(evaluations),
+            "last_update": event_notifier.get_last_update_time()
         }
     except Exception as e:
         logger.error(f"Failed to get evaluation history: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/evaluation/updates")
+async def get_evaluation_updates():
+    """Get the timestamp of the last evaluation update"""
+    return {
+        "last_update": event_notifier.get_last_update_time(),
+        "has_updates": event_notifier.get_last_update_time() > 0
+    }
 
 @app.get("/api/evaluation/evaluations/latest")
 async def get_latest_evaluation():

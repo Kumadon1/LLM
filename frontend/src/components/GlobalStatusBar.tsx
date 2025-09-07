@@ -20,7 +20,6 @@ import {
 import { useTrainingStore } from '../store/trainingStore';
 import { useMonteCarloStore } from '../store/monteCarloStore';
 import { useGenerationStore } from '../store/generationStore';
-import { useNavigate } from 'react-router-dom';
 
 interface JobIndicatorProps {
   icon: React.ReactNode;
@@ -143,8 +142,11 @@ const JobIndicator: React.FC<JobIndicatorProps> = ({
   );
 };
 
-export const GlobalStatusBar: React.FC = () => {
-  const navigate = useNavigate();
+interface GlobalStatusBarProps {
+  onNavigateToTab?: (tabIndex: number) => void;
+}
+
+export const GlobalStatusBar: React.FC<GlobalStatusBarProps> = ({ onNavigateToTab }) => {
   
   // Training store
   const {
@@ -204,8 +206,11 @@ export const GlobalStatusBar: React.FC = () => {
           message={trainingMessage}
           onPause={trainingStatus === 'running' ? stopTraining : undefined}
           onResume={trainingStatus === 'paused' ? resumeTraining : undefined}
-          onStop={stopTraining}
-          onNavigate={() => navigate('/add-text')}
+          onStop={trainingStatus === 'paused' ? () => {
+            stopTraining();
+            useTrainingStore.getState().clear();
+          } : stopTraining}
+          onNavigate={() => onNavigateToTab?.(1)}
           color="primary"
         />
       )}
@@ -221,7 +226,7 @@ export const GlobalStatusBar: React.FC = () => {
           onPause={mcStatus === 'running' ? pauseMC : undefined}
           onResume={mcStatus === 'paused' ? resumeMC : undefined}
           onStop={stopMC}
-          onNavigate={() => navigate('/monte-carlo')}
+          onNavigate={() => onNavigateToTab?.(4)}
           color="secondary"
         />
       )}
@@ -234,7 +239,7 @@ export const GlobalStatusBar: React.FC = () => {
           progress={50}
           status={genStatus}
           message="Generating text..."
-          onNavigate={() => navigate('/generate')}
+          onNavigate={() => onNavigateToTab?.(2)}
           color="info"
         />
       )}

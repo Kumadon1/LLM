@@ -140,6 +140,34 @@ const Accuracy: React.FC = () => {
     fetchEvaluations();
   }, [sessionFilter]);
 
+  // Check for updates every 5 seconds when component is mounted
+  // This is lightweight for a desktop app - just checks a timestamp
+  useEffect(() => {
+    let lastKnownUpdate = 0;
+    
+    const checkForUpdates = async () => {
+      try {
+        const response = await axios.get('http://localhost:5001/api/evaluation/updates');
+        if (response.data.last_update > lastKnownUpdate) {
+          // New evaluation available, refresh the data
+          console.log('New Monte Carlo evaluation detected, refreshing...');
+          lastKnownUpdate = response.data.last_update;
+          fetchEvaluations();
+        }
+      } catch (error) {
+        // Silently ignore errors in update check
+      }
+    };
+
+    // Initial check
+    checkForUpdates();
+    
+    // Set up interval for checking updates
+    const interval = setInterval(checkForUpdates, 5000); // Check every 5 seconds
+    
+    return () => clearInterval(interval);
+  }, [sessionFilter]); // Re-setup when filter changes
+
   // Create SVG chart
   const renderChart = () => {
     if (chartData.length === 0) {

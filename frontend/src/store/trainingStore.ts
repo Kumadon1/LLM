@@ -4,7 +4,7 @@ import { pollingManager } from './polling';
 // Global training job store that keeps polling even when pages unmount.
 // We persist jobId in localStorage so the app can resume after reload/tab switch.
 
-export type TrainingStatus = 'idle' | 'queued' | 'running' | 'success' | 'error';
+export type TrainingStatus = 'idle' | 'queued' | 'running' | 'paused' | 'success' | 'error';
 
 export interface TrainingStats {
   total_patterns: number;
@@ -66,7 +66,7 @@ export const useTrainingStore = create<TrainingState>((set, get) => ({
     if (jobId) {
       pollingManager.stop(`training-${jobId}`);
       // Keep the job ID in case user wants to resume
-      set({ status: 'idle', message: 'Training paused' });
+      set({ status: 'paused', message: 'Training paused' });
     }
   },
   
@@ -75,7 +75,7 @@ export const useTrainingStore = create<TrainingState>((set, get) => ({
     if (!jobId) return;
     
     try {
-      const res = await fetch(`http://localhost:8000/api/training/job/${jobId}`);
+      const res = await fetch(`http://localhost:8000/api/train/${jobId}`);
       if (!res.ok) {
         if (res.status === 404) {
           set({ status: 'error', message: 'Job not found', error: 'Job not found' });
@@ -126,7 +126,7 @@ export const useTrainingStore = create<TrainingState>((set, get) => ({
     });
     
     try {
-      const res = await fetch('http://localhost:8000/api/training/submit', {
+      const res = await fetch('http://localhost:8000/api/train', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text, block_size, epochs }),

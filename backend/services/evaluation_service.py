@@ -192,8 +192,28 @@ def store_evaluation_result(result: Dict, training_job_id: Optional[str] = None)
         json.dumps(db_result['parameters'])
     ))
     
+    evaluation_id = cursor.lastrowid
     conn.commit()
     conn.close()
+    
+    # Notify the event system (for desktop app push updates)
+    try:
+        # Import here to avoid circular dependency
+        import sys
+        import os
+        sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from app import event_notifier
+        
+        event_notifier.notify_monte_carlo_complete(
+            evaluation_id=evaluation_id,
+            stats={
+                'mean_validity': db_result['mean_validity'],
+                'training_job_id': training_job_id
+            }
+        )
+        logger.info(f"Notified event system of Monte Carlo completion (ID: {evaluation_id})")
+    except Exception as e:
+        logger.warning(f"Could not notify event system: {e}")
 
 def get_evaluation_history(limit: int = 10) -> List[Dict]:
     """Get recent evaluation results"""

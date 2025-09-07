@@ -113,8 +113,9 @@ const MonteCarlo: React.FC = () => {
           });
           
           if (historicalResults.length > 0) {
-            setResults(historicalResults);
-            setStatus(`Loaded ${historicalResults.length} historical evaluation results`);
+            // Add historical results to the store
+            appendResults(historicalResults);
+            console.log(`Loaded ${historicalResults.length} historical evaluation results`);
           }
         }
       } catch (err) {

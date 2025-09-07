@@ -145,7 +145,7 @@ const AppFixed: React.FC = () => {
       </Box>
       
       {/* Global Status Bar for running operations */}
-      <GlobalStatusBar />
+      <GlobalStatusBar onNavigateToTab={setCurrentTab} />
     </ThemeProvider>
   );
 };
